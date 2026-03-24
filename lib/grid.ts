@@ -1,21 +1,17 @@
-import { latLngToCell, cellToLatLng, cellToBoundary } from "h3-js";
+import { latLngToCell, cellToLatLng } from "h3-js";
 import type { Sample } from "./mockData";
 
 export interface GridCell {
   cellId: string;
   lat: number;
   lon: number;
-  /** boundary as [lat, lon][] for Leaflet polygon */
-  boundary: [number, number][];
   avgDbm: number;
   avgLevel: number;
   sampleCount: number;
   dominantCarrier: string;
   dominantNetwork: string;
-  /** ISO timestamp of the most recent sample in this cell */
-  latestTs: string;
-  /** ISO timestamp of the oldest sample in this cell */
-  oldestTs: string;
+  latestTs?: string;
+  oldestTs?: string;
 }
 
 /**
@@ -53,7 +49,6 @@ export function aggregateToH3(samples: Sample[], resolution: number): GridCell[]
 
   return Array.from(buckets.entries()).map(([cellId, bucket]) => {
     const [lat, lon] = cellToLatLng(cellId);
-    const boundary = cellToBoundary(cellId) as [number, number][];
 
     const avgDbm = Math.round(
       bucket.reduce((s, x) => s + x.cellular_dbm, 0) / bucket.length
@@ -74,7 +69,7 @@ export function aggregateToH3(samples: Sample[], resolution: number): GridCell[]
     const oldestTs = timestamps[0];
     const latestTs = timestamps[timestamps.length - 1];
 
-    return { cellId, lat, lon, boundary, avgDbm, avgLevel, sampleCount: bucket.length, dominantCarrier, dominantNetwork, latestTs, oldestTs };
+    return { cellId, lat, lon, avgDbm, avgLevel, sampleCount: bucket.length, dominantCarrier, dominantNetwork, latestTs, oldestTs };
   });
 }
 

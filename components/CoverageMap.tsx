@@ -297,10 +297,12 @@ export default function CoverageMap({
               <>
                 <Row label={t.popover.samples}  value={`${selected.cell.sampleCount}`} />
                 <Row label={t.popover.wifi}     value="—" />
-                <div className="pt-1 border-t border-slate-600 space-y-1">
-                  <Row label={t.popover.period}
-                    value={`${formatDate(selected.cell.oldestTs)} → ${formatDate(selected.cell.latestTs)}`} />
-                </div>
+                {selected.cell.latestTs && selected.cell.oldestTs && (
+                  <div className="pt-1 border-t border-slate-600 space-y-1">
+                    <Row label={t.popover.period}
+                      value={`${formatDate(selected.cell.oldestTs)} → ${formatDate(selected.cell.latestTs)}`} />
+                  </div>
+                )}
               </>
             ) : (
               <>
