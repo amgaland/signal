@@ -20,6 +20,7 @@ export const translations = {
       carrier: "Carrier",
       weak: "Weak (1)",
       strong: "Strong (5)",
+      isdnSearch: "Search MSISDN",
       colorModes: {
         signal: "Signal Level",
         network: "Network Type",
@@ -40,6 +41,17 @@ export const translations = {
       wifi: "WiFi",
       speed: "Speed",
       app: "App",
+      isdn: "MSISDN",
+      collected: "Collected",
+      period: "Period",
+      samples: "Samples",
+      quality: {
+        5: "Excellent",
+        4: "Good",
+        3: "Fair",
+        2: "Poor",
+        1: "Very Poor",
+      },
     },
     map: {
       loading: "Loading map…",
@@ -64,6 +76,7 @@ export const translations = {
       carrier: "Оператор",
       weak: "Сул (1)",
       strong: "Хүчтэй (5)",
+      isdnSearch: "MSISDN хайх",
       colorModes: {
         signal: "Дохионы Түвшин",
         network: "Сүлжээний Төрөл",
@@ -84,6 +97,17 @@ export const translations = {
       wifi: "WiFi",
       speed: "Хурд",
       app: "Апп",
+      isdn: "MSISDN",
+      collected: "Цуглуулсан",
+      period: "Хугацаа",
+      samples: "Дээж",
+      quality: {
+        5: "Маш сайн",
+        4: "Сайн",
+        3: "Дунд",
+        2: "Муу",
+        1: "Маш муу",
+      },
     },
     map: {
       loading: "Зураг ачааллаж байна…",

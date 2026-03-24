@@ -10,6 +10,7 @@ export interface Filters {
   carriers: Carrier[];
   networkTypes: NetworkType[];
   levelRange: [number, number];
+  isdn: string;
 }
 
 interface FilterPanelProps {
@@ -54,6 +55,7 @@ export default function FilterPanel({
       carriers: [...ALL_CARRIERS],
       networkTypes: [...ALL_NETWORK_TYPES],
       levelRange: [1, 5],
+      isdn: "",
     });
 
   return (
@@ -79,6 +81,15 @@ export default function FilterPanel({
         <span className="text-white font-semibold">{totalFiltered}</span>{" "}
         {t.filterPanel.samplesOf}
       </p>
+
+      {/* ISDN search */}
+      <input
+        type="text"
+        value={filters.isdn}
+        onChange={(e) => onChange({ ...filters, isdn: e.target.value })}
+        placeholder={t.filterPanel.isdnSearch}
+        className="w-full bg-slate-800 border border-slate-600 rounded-md px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+      />
 
       {/* Color mode toggle */}
       <Card className="bg-slate-800 border-slate-600">

@@ -1,70 +1,99 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import type { Sample } from "@/lib/mockData";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useLanguage } from "@/lib/LanguageContext";
+import { fetchCoverage, type CoverageQuery, type CoverageResponse } from "@/lib/api";
+import { GRID_ZOOM_THRESHOLD, levelFromAvg } from "@/lib/grid";
+import type { GridCell } from "@/lib/grid";
+import type { Sample, Carrier, NetworkType } from "@/lib/mockData";
 
 interface CoverageMapProps {
-  samples: Sample[];
+  carriers: Carrier[];
+  networkTypes: NetworkType[];
+  levelRange: [number, number];
   colorMode: "signal" | "network";
+  isdn: string;
 }
 
+// ── Color maps ────────────────────────────────────────────────────────────────
 const SIGNAL_COLORS: Record<number, string> = {
-  5: "#22c55e", // green-500
-  4: "#84cc16", // lime-500
-  3: "#eab308", // yellow-500
-  2: "#f97316", // orange-500
-  1: "#ef4444", // red-500
+  5: "#22c55e",
+  4: "#84cc16",
+  3: "#eab308",
+  2: "#f97316",
+  1: "#ef4444",
+};
+const NETWORK_COLORS: Record<string, string> = {
+  "5G": "#3b82f6",
+  "4G": "#22c55e",
+  "3G": "#eab308",
+  "2G": "#ef4444",
 };
 
-const NETWORK_COLORS: Record<string, string> = {
-  "5G": "#3b82f6", // blue-500
-  "4G": "#22c55e", // green-500
-  "3G": "#eab308", // yellow-500
-  "2G": "#ef4444", // red-500
-};
+function signalColor(level: number) { return SIGNAL_COLORS[level] ?? "#94a3b8"; }
+function networkColor(type: string)  { return NETWORK_COLORS[type]  ?? "#94a3b8"; }
 
 function formatTs(ts: string) {
   return new Date(ts).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
+    month: "short", day: "numeric", year: "numeric",
+    hour: "2-digit", minute: "2-digit",
   });
 }
 
-export default function CoverageMap({ samples, colorMode }: CoverageMapProps) {
+function formatDate(ts: string) {
+  return new Date(ts).toLocaleDateString("en-US", {
+    month: "short", day: "numeric", year: "numeric",
+  });
+}
+
+function SignalBars({ level, color }: { level: number; color: string }) {
+  const heights = [4, 7, 10, 13, 16];
+  return (
+    <svg width="28" height="18" viewBox="0 0 28 18" xmlns="http://www.w3.org/2000/svg">
+      {heights.map((h, i) => (
+        <rect
+          key={i}
+          x={i * 6}
+          y={18 - h}
+          width={4}
+          height={h}
+          rx={1}
+          fill={i < level ? color : "#475569"}
+        />
+      ))}
+    </svg>
+  );
+}
+
+// ── Selected item — either a grid cell or individual sample ──────────────────
+type Selected =
+  | { kind: "cell";   cell: GridCell }
+  | { kind: "sample"; sample: Sample };
+
+// ── Component ────────────────────────────────────────────────────────────────
+export default function CoverageMap({
+  carriers, networkTypes, levelRange, colorMode, isdn,
+}: CoverageMapProps) {
   const { t } = useLanguage();
-  const mapContainerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<any>(null);
-  const markersRef = useRef<any[]>([]);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef       = useRef<any>(null);
+  const layerRef     = useRef<any[]>([]); // current rendered layers (markers or polygons)
+
   const [mapReady, setMapReady] = useState(false);
-  const [selectedSample, setSelectedSample] = useState<Sample | null>(null);
+  const [zoom, setZoom] = useState(12);
+  const [selected, setSelected] = useState<Selected | null>(null);
   const [popoverPos, setPopoverPos] = useState<{ x: number; y: number } | null>(null);
 
-  // Initialize map
+  // ── Init map (once) ─────────────────────────────────────────────────────
   useEffect(() => {
     if (typeof window === "undefined" || mapRef.current) return;
 
     import("leaflet").then((L) => {
-      // Fix default icon paths for Next.js
       delete (L.Icon.Default.prototype as any)._getIconUrl;
-      L.Icon.Default.mergeOptions({
-        iconRetinaUrl:
-          "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-        iconUrl:
-          "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-        shadowUrl:
-          "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-      });
+      if (!containerRef.current) return;
+      if ((containerRef.current as any)._leaflet_id) return;
 
-      if (!mapContainerRef.current) return;
-
-      // Guard against StrictMode double-invoke leaving a stale _leaflet_id on the DOM node
-      if ((mapContainerRef.current as any)._leaflet_id) return;
-
-      const map = L.map(mapContainerRef.current, {
+      const map = L.map(containerRef.current, {
         center: [47.9077, 106.9036],
         zoom: 12,
         zoomControl: true,
@@ -74,13 +103,16 @@ export default function CoverageMap({ samples, colorMode }: CoverageMapProps) {
         "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
         {
           attribution:
-            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' +
+            ' &copy; <a href="https://carto.com/attributions">CARTO</a>',
           maxZoom: 19,
         }
       ).addTo(map);
 
+      map.on("zoomend", () => setZoom(map.getZoom()));
+      map.on("click",   () => { setSelected(null); setPopoverPos(null); });
+
       mapRef.current = map;
-      // Signal that the map is ready so the markers effect re-runs
       setMapReady(true);
     });
 
@@ -93,137 +125,207 @@ export default function CoverageMap({ samples, colorMode }: CoverageMapProps) {
     };
   }, []);
 
-  // Update markers when samples or colorMode change (or once the map first becomes ready)
-  useEffect(() => {
+  // ── Re-render layers whenever any relevant prop or zoom changes ──────────
+  const renderLayers = useCallback(async () => {
     if (!mapReady || !mapRef.current) return;
 
+    const map = mapRef.current;
+    const bounds = map.getBounds();
+    const query: CoverageQuery = {
+      bbox: [bounds.getSouth(), bounds.getWest(), bounds.getNorth(), bounds.getEast()],
+      zoom: map.getZoom(),
+      carriers,
+      networkTypes,
+      levelMin: levelRange[0],
+      levelMax: levelRange[1],
+      isdn: isdn || undefined,
+    };
+
+    const response: CoverageResponse = await fetchCoverage(query);
+
     import("leaflet").then((L) => {
-      // Remove old markers
-      markersRef.current.forEach((m) => m.remove());
-      markersRef.current = [];
+      // clear previous layers
+      layerRef.current.forEach((l) => l.remove());
+      layerRef.current = [];
 
-      samples.forEach((sample) => {
-        const color =
-          colorMode === "signal"
-            ? SIGNAL_COLORS[sample.cellular_level]
-            : NETWORK_COLORS[sample.network_type];
+      if (response.mode === "grid") {
+        // ── Circles (one per aggregated cell) ─────────────────────────────
+        // Radius matches approximate H3 cell size at each zoom level
+        const radiusMap: Record<number, number> = { 5: 40000, 6: 15000, 7: 5500, 8: 2000, 9: 750 };
+        const zoom = map.getZoom();
+        const res  = zoom <= 9 ? 5 : zoom <= 10 ? 6 : zoom <= 11 ? 7 : zoom <= 12 ? 8 : 9;
+        const radius = radiusMap[res] ?? 2000;
 
-        const svgIcon = L.divIcon({
-          className: "",
-          html: `<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="8" cy="8" r="7" fill="${color}" fill-opacity="0.85" stroke="white" stroke-width="1.5"/>
-          </svg>`,
-          iconSize: [16, 16],
-          iconAnchor: [8, 8],
-        });
+        for (const cell of response.cells) {
+          const level = levelFromAvg(cell.avgLevel);
+          const color =
+            colorMode === "signal"
+              ? signalColor(level)
+              : networkColor(cell.dominantNetwork);
 
-        const marker = L.marker([sample.lat, sample.lon], { icon: svgIcon }).addTo(
-          mapRef.current
-        );
+          const circle = L.circle([cell.lat, cell.lon], {
+            radius,
+            color,
+            fillColor: color,
+            fillOpacity: 0.55,
+            weight: 1,
+            opacity: 0.8,
+          }).addTo(map);
 
-        marker.on("click", (e: any) => {
-          const containerPoint = mapRef.current.latLngToContainerPoint([
-            sample.lat,
-            sample.lon,
-          ]);
-          setPopoverPos({
-            x: containerPoint.x,
-            y: containerPoint.y,
+          circle.on("click", (e: any) => {
+            const pt = map.latLngToContainerPoint([cell.lat, cell.lon]);
+            setPopoverPos({ x: pt.x, y: pt.y });
+            setSelected({ kind: "cell", cell });
+            L.DomEvent.stopPropagation(e);
           });
-          setSelectedSample(sample);
-          L.DomEvent.stopPropagation(e);
-        });
 
-        markersRef.current.push(marker);
-      });
+          layerRef.current.push(circle);
+        }
+      } else {
+        // ── Individual dots ────────────────────────────────────────────────
+        for (const sample of response.samples) {
+          const color =
+            colorMode === "signal"
+              ? signalColor(sample.cellular_level)
+              : networkColor(sample.network_type);
 
-      // Close popover when clicking map
-      mapRef.current.on("click", () => {
-        setSelectedSample(null);
-        setPopoverPos(null);
-      });
+          const icon = L.divIcon({
+            className: "",
+            html: `<svg width="14" height="14" viewBox="0 0 14 14" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="7" cy="7" r="6" fill="${color}" fill-opacity="0.9" stroke="white" stroke-width="1.5"/>
+            </svg>`,
+            iconSize: [14, 14],
+            iconAnchor: [7, 7],
+          });
+
+          const marker = L.marker([sample.lat, sample.lon], { icon }).addTo(map);
+
+          marker.on("click", (e: any) => {
+            const pt = map.latLngToContainerPoint([sample.lat, sample.lon]);
+            setPopoverPos({ x: pt.x, y: pt.y });
+            setSelected({ kind: "sample", sample });
+            L.DomEvent.stopPropagation(e);
+          });
+
+          layerRef.current.push(marker);
+        }
+      }
     });
-  }, [samples, colorMode, mapReady]);
+  }, [mapReady, carriers, networkTypes, levelRange, colorMode, zoom, isdn]); // zoom triggers H3 res change
+
+  useEffect(() => { renderLayers(); }, [renderLayers]);
+
+  // ── Popover color helper ─────────────────────────────────────────────────
+  function selectedColor() {
+    if (!selected) return "#94a3b8";
+    if (selected.kind === "cell") {
+      const lvl = levelFromAvg(selected.cell.avgLevel);
+      return colorMode === "signal" ? signalColor(lvl) : networkColor(selected.cell.dominantNetwork);
+    }
+    return colorMode === "signal"
+      ? signalColor(selected.sample.cellular_level)
+      : networkColor(selected.sample.network_type);
+  }
 
   return (
     <div className="relative w-full h-full">
-      {/* Leaflet CSS */}
       <style>{`
         @import url("https://unpkg.com/leaflet@1.9.4/dist/leaflet.css");
         .leaflet-container { background: #1e293b; }
       `}</style>
 
-      <div ref={mapContainerRef} className="w-full h-full" />
+      <div ref={containerRef} className="w-full h-full" />
+
+      {/* Zoom mode indicator */}
+      <div className="absolute bottom-6 left-4 z-[900] bg-slate-800/80 backdrop-blur-sm text-xs text-slate-300 px-2 py-1 rounded border border-slate-600">
+        {zoom < GRID_ZOOM_THRESHOLD
+          ? `H3 grid · zoom ${zoom}`
+          : `Dots · zoom ${zoom}`}
+      </div>
 
       {/* Popover */}
-      {selectedSample && popoverPos && (
+      {selected && popoverPos && (
         <div
-          className="absolute z-[1000] w-64 bg-slate-800 border border-slate-600 rounded-lg shadow-2xl p-4 text-white"
+          className="absolute z-[1000] w-64 max-h-[85vh] overflow-y-auto bg-slate-800 border border-slate-600 rounded-lg shadow-2xl p-4 text-white"
           style={{
             left: Math.min(popoverPos.x + 12, window.innerWidth - 280),
-            top: Math.max(popoverPos.y - 100, 8),
+            top:  Math.min(Math.max(popoverPos.y - 100, 8), window.innerHeight - 320),
           }}
         >
           {/* Header */}
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <div
-                className="w-3 h-3 rounded-full"
-                style={{
-                  backgroundColor:
-                    colorMode === "signal"
-                      ? SIGNAL_COLORS[selectedSample.cellular_level]
-                      : NETWORK_COLORS[selectedSample.network_type],
-                }}
-              />
-              <span className="font-semibold text-sm">{selectedSample.carrier}</span>
+              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: selectedColor() }} />
+              <span className="font-semibold text-sm">
+                {selected.kind === "cell"
+                  ? selected.cell.dominantCarrier
+                  : selected.sample.carrier}
+              </span>
             </div>
             <span className="text-xs px-2 py-0.5 rounded-full bg-blue-600 font-medium">
-              {selectedSample.network_type}
+              {selected.kind === "cell"
+                ? selected.cell.dominantNetwork
+                : selected.sample.network_type}
             </span>
           </div>
 
-          {/* Data rows */}
+          {/* Signal bars + quality label */}
+          {(() => {
+            const lvl = selected.kind === "cell"
+              ? levelFromAvg(selected.cell.avgLevel)
+              : selected.sample.cellular_level;
+            return (
+              <div className="flex items-center gap-3 mb-3 p-2 bg-slate-700/50 rounded-md">
+                <SignalBars level={lvl} color={selectedColor()} />
+                <div>
+                  <p className="text-xs font-semibold" style={{ color: selectedColor() }}>
+                    {t.popover.quality[lvl as 1|2|3|4|5]}
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    {selected.kind === "cell"
+                      ? `${selected.cell.avgDbm} dBm (avg)`
+                      : `${selected.sample.cellular_dbm} dBm`}
+                  </p>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Body */}
           <div className="space-y-1.5 text-xs">
-            <Row label={t.popover.signal} value={`${selectedSample.cellular_dbm} dBm`} />
-            <Row
-              label={t.popover.level}
-              value={`${selectedSample.cellular_level} / 5`}
-              valueClass="font-bold"
-            />
-            <Row label={t.popover.wifi} value={`${selectedSample.wifi_dbm} dBm`} />
-            <Row label={t.popover.speed} value={`${selectedSample.speed_kmh} km/h`} />
-            <Row label={t.popover.app} value={selectedSample.app_version} />
-            <div className="pt-1 border-t border-slate-600">
-              <p className="text-slate-400">{formatTs(selectedSample.ts)}</p>
-            </div>
+            {selected.kind === "cell" ? (
+              <>
+                <Row label={t.popover.samples}  value={`${selected.cell.sampleCount}`} />
+                <Row label={t.popover.wifi}     value="—" />
+                <div className="pt-1 border-t border-slate-600 space-y-1">
+                  <Row label={t.popover.period}
+                    value={`${formatDate(selected.cell.oldestTs)} → ${formatDate(selected.cell.latestTs)}`} />
+                </div>
+              </>
+            ) : (
+              <>
+                <Row label={t.popover.isdn}   value={selected.sample.isdn} />
+                <Row label={t.popover.wifi}   value={`${selected.sample.wifi_dbm} dBm`} />
+                <Row label={t.popover.speed}  value={`${selected.sample.speed_kmh} km/h`} />
+                <Row label={t.popover.app}    value={selected.sample.app_version} />
+                <div className="pt-1 border-t border-slate-600">
+                  <Row label={t.popover.collected} value={formatTs(selected.sample.ts)} />
+                </div>
+              </>
+            )}
           </div>
 
-          {/* Close button */}
           <button
             className="absolute top-2 right-2 text-slate-400 hover:text-white text-lg leading-none"
-            onClick={() => {
-              setSelectedSample(null);
-              setPopoverPos(null);
-            }}
-          >
-            ×
-          </button>
+            onClick={() => { setSelected(null); setPopoverPos(null); }}
+          >×</button>
         </div>
       )}
     </div>
   );
 }
 
-function Row({
-  label,
-  value,
-  valueClass = "",
-}: {
-  label: string;
-  value: string;
-  valueClass?: string;
-}) {
+function Row({ label, value, valueClass = "" }: { label: string; value: string; valueClass?: string }) {
   return (
     <div className="flex justify-between">
       <span className="text-slate-400">{label}</span>

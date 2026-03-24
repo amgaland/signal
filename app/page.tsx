@@ -8,7 +8,6 @@ import StatsBar from "@/components/StatsBar";
 import { useLanguage } from "@/lib/LanguageContext";
 import type { Locale } from "@/lib/i18n";
 
-// Load map only on client (Leaflet requires window)
 const CoverageMap = dynamic(() => import("@/components/CoverageMap"), {
   ssr: false,
   loading: () => <MapLoading />,
@@ -29,23 +28,28 @@ export default function Home() {
     carriers: [...ALL_CARRIERS],
     networkTypes: [...ALL_NETWORK_TYPES],
     levelRange: [1, 5],
+    isdn: "",
   });
   const [colorMode, setColorMode] = useState<"signal" | "network">("signal");
 
-  const filtered = useMemo(() => {
-    return mockSamples.filter(
-      (s) =>
-        filters.carriers.includes(s.carrier) &&
-        filters.networkTypes.includes(s.network_type) &&
-        s.cellular_level >= filters.levelRange[0] &&
-        s.cellular_level <= filters.levelRange[1]
-    );
-  }, [filters]);
+  // Stats bar still needs a filtered count — compute from all samples (not bbox-restricted)
+  const filteredForStats = useMemo(
+    () =>
+      mockSamples.filter(
+        (s) =>
+          filters.carriers.includes(s.carrier) &&
+          filters.networkTypes.includes(s.network_type) &&
+          s.cellular_level >= filters.levelRange[0] &&
+          s.cellular_level <= filters.levelRange[1] &&
+          (!filters.isdn || s.isdn.includes(filters.isdn))
+      ),
+    [filters]
+  );
 
   return (
     <main className="flex flex-col h-screen bg-slate-900">
       <StatsBar
-        samples={filtered}
+        samples={filteredForStats}
         locale={locale}
         onLocaleChange={(l: Locale) => setLocale(l)}
       />
@@ -55,10 +59,16 @@ export default function Home() {
           onChange={setFilters}
           colorMode={colorMode}
           onColorModeChange={setColorMode}
-          totalFiltered={filtered.length}
+          totalFiltered={filteredForStats.length}
         />
         <div className="flex-1 relative">
-          <CoverageMap samples={filtered} colorMode={colorMode} />
+          <CoverageMap
+            carriers={filters.carriers}
+            networkTypes={filters.networkTypes}
+            levelRange={filters.levelRange}
+            colorMode={colorMode}
+            isdn={filters.isdn}
+          />
         </div>
       </div>
     </main>
