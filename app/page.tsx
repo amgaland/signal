@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import dynamic from "next/dynamic";
-import { mockSamples, ALL_CARRIERS, ALL_NETWORK_TYPES } from "@/lib/mockData";
+import { ALL_CARRIERS, ALL_NETWORK_TYPES } from "@/lib/mockData";
 import FilterPanel, { type Filters } from "@/components/FilterPanel";
 import StatsBar from "@/components/StatsBar";
 import { useLanguage } from "@/lib/LanguageContext";
 import type { Locale } from "@/lib/i18n";
+import type { MapStats } from "@/components/CoverageMap";
 
 const CoverageMap = dynamic(() => import("@/components/CoverageMap"), {
   ssr: false,
@@ -31,25 +32,12 @@ export default function Home() {
     isdn: "",
   });
   const [colorMode, setColorMode] = useState<"signal" | "network">("signal");
-
-  // Stats bar still needs a filtered count — compute from all samples (not bbox-restricted)
-  const filteredForStats = useMemo(
-    () =>
-      mockSamples.filter(
-        (s) =>
-          filters.carriers.includes(s.carrier) &&
-          filters.networkTypes.includes(s.network_type) &&
-          s.cellular_level >= filters.levelRange[0] &&
-          s.cellular_level <= filters.levelRange[1] &&
-          (!filters.isdn || s.isdn.includes(filters.isdn))
-      ),
-    [filters]
-  );
+  const [mapStats, setMapStats] = useState<MapStats | null>(null);
 
   return (
     <main className="flex flex-col h-screen bg-slate-900">
       <StatsBar
-        samples={filteredForStats}
+        stats={mapStats}
         locale={locale}
         onLocaleChange={(l: Locale) => setLocale(l)}
       />
@@ -59,7 +47,7 @@ export default function Home() {
           onChange={setFilters}
           colorMode={colorMode}
           onColorModeChange={setColorMode}
-          totalFiltered={filteredForStats.length}
+          totalFiltered={mapStats?.total ?? 0}
         />
         <div className="flex-1 relative">
           <CoverageMap
@@ -68,6 +56,7 @@ export default function Home() {
             levelRange={filters.levelRange}
             colorMode={colorMode}
             isdn={filters.isdn}
+            onStats={setMapStats}
           />
         </div>
       </div>

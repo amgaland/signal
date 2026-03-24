@@ -7,7 +7,7 @@ import type { GridCell } from "./grid";
 import type { Sample, Carrier, NetworkType } from "./mockData";
 
 const COVERAGE_URL =
-  process.env.NEXT_PUBLIC_COVERAGE_URL ?? "/proxy/coverage";
+  process.env.NEXT_PUBLIC_COVERAGE_URL ?? "/api/coverage";
 
 export interface CoverageQuery {
   bbox: [number, number, number, number]; // [sw_lat, sw_lon, ne_lat, ne_lon]

@@ -7,12 +7,21 @@ import { GRID_ZOOM_THRESHOLD, levelFromAvg } from "@/lib/grid";
 import type { GridCell } from "@/lib/grid";
 import type { Sample, Carrier, NetworkType } from "@/lib/mockData";
 
+export interface MapStats {
+  total: number;
+  avgDbm: number;
+  avgLevel: number;
+  strongestCarrier: string;
+  networkCounts: Record<string, number>;
+}
+
 interface CoverageMapProps {
   carriers: Carrier[];
   networkTypes: NetworkType[];
   levelRange: [number, number];
   colorMode: "signal" | "network";
   isdn: string;
+  onStats?: (stats: MapStats) => void;
 }
 
 // ── Color maps ────────────────────────────────────────────────────────────────
@@ -72,7 +81,7 @@ type Selected =
 
 // ── Component ────────────────────────────────────────────────────────────────
 export default function CoverageMap({
-  carriers, networkTypes, levelRange, colorMode, isdn,
+  carriers, networkTypes, levelRange, colorMode, isdn, onStats,
 }: CoverageMapProps) {
   const { t } = useLanguage();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -143,6 +152,37 @@ export default function CoverageMap({
 
     const response: CoverageResponse = await fetchCoverage(query);
 
+    // ── Compute stats from real API response ─────────────────────────────
+    if (onStats) {
+      if (response.mode === "grid" && response.cells.length > 0) {
+        const cells = response.cells;
+        const total = cells.reduce((s, c) => s + c.sampleCount, 0);
+        const avgDbm = Math.round(cells.reduce((s, c) => s + c.avgDbm * c.sampleCount, 0) / total);
+        const avgLevel = cells.reduce((s, c) => s + c.avgLevel * c.sampleCount, 0) / total;
+        const carrierTally: Record<string, number> = {};
+        const networkCounts: Record<string, number> = {};
+        for (const c of cells) {
+          carrierTally[c.dominantCarrier] = (carrierTally[c.dominantCarrier] ?? 0) + c.sampleCount;
+          networkCounts[c.dominantNetwork] = (networkCounts[c.dominantNetwork] ?? 0) + c.sampleCount;
+        }
+        const strongestCarrier = Object.entries(carrierTally).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "—";
+        onStats({ total, avgDbm, avgLevel, strongestCarrier, networkCounts });
+      } else if (response.mode === "samples" && response.samples.length > 0) {
+        const samples = response.samples;
+        const total = samples.length;
+        const avgDbm = Math.round(samples.reduce((s, x) => s + x.cellular_dbm, 0) / total);
+        const avgLevel = samples.reduce((s, x) => s + x.cellular_level, 0) / total;
+        const carrierTally: Record<string, number> = {};
+        const networkCounts: Record<string, number> = {};
+        for (const s of samples) {
+          carrierTally[s.carrier] = (carrierTally[s.carrier] ?? 0) + 1;
+          networkCounts[s.network_type] = (networkCounts[s.network_type] ?? 0) + 1;
+        }
+        const strongestCarrier = Object.entries(carrierTally).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "—";
+        onStats({ total, avgDbm, avgLevel, strongestCarrier, networkCounts });
+      }
+    }
+
     import("leaflet").then((L) => {
       // clear previous layers
       layerRef.current.forEach((l) => l.remove());
@@ -211,7 +251,7 @@ export default function CoverageMap({
         }
       }
     });
-  }, [mapReady, carriers, networkTypes, levelRange, colorMode, zoom, isdn]); // zoom triggers H3 res change
+  }, [mapReady, carriers, networkTypes, levelRange, colorMode, zoom, isdn, onStats]); // zoom triggers H3 res change
 
   useEffect(() => { renderLayers(); }, [renderLayers]);
 
