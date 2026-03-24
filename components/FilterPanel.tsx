@@ -2,9 +2,8 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { SlidersHorizontal, RotateCcw } from "lucide-react";
+import { useLanguage } from "@/lib/LanguageContext";
 import type { Carrier, NetworkType } from "@/lib/mockData";
 
 export interface Filters {
@@ -48,6 +47,8 @@ export default function FilterPanel({
   onColorModeChange,
   totalFiltered,
 }: FilterPanelProps) {
+  const { t } = useLanguage();
+
   const reset = () =>
     onChange({
       carriers: [...ALL_CARRIERS],
@@ -61,26 +62,28 @@ export default function FilterPanel({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-white">
           <SlidersHorizontal className="w-4 h-4 text-blue-400" />
-          <span className="font-semibold text-sm">Filters</span>
+          <span className="font-semibold text-sm">{t.filterPanel.title}</span>
         </div>
         <button
           onClick={reset}
           className="flex items-center gap-1 text-xs text-slate-400 hover:text-white transition-colors"
         >
           <RotateCcw className="w-3 h-3" />
-          Reset
+          {t.filterPanel.reset}
         </button>
       </div>
 
       {/* Result count */}
       <p className="text-xs text-slate-400">
-        Showing <span className="text-white font-semibold">{totalFiltered}</span> samples
+        {t.filterPanel.showing}{" "}
+        <span className="text-white font-semibold">{totalFiltered}</span>{" "}
+        {t.filterPanel.samplesOf}
       </p>
 
       {/* Color mode toggle */}
       <Card className="bg-slate-800 border-slate-600">
         <CardHeader className="pb-2 pt-4 px-4">
-          <CardTitle className="text-sm text-white">Color Mode</CardTitle>
+          <CardTitle className="text-sm text-white">{t.filterPanel.colorMode}</CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-4">
           <div className="flex rounded-md overflow-hidden border border-slate-600">
@@ -92,7 +95,7 @@ export default function FilterPanel({
               }`}
               onClick={() => onColorModeChange("signal")}
             >
-              Signal Level
+              {t.filterPanel.colorModes.signal}
             </button>
             <button
               className={`flex-1 py-1.5 text-xs font-medium transition-colors ${
@@ -102,7 +105,7 @@ export default function FilterPanel({
               }`}
               onClick={() => onColorModeChange("network")}
             >
-              Network Type
+              {t.filterPanel.colorModes.network}
             </button>
           </div>
 
@@ -118,27 +121,22 @@ export default function FilterPanel({
                     2: "bg-orange-500",
                     1: "bg-red-500",
                   };
-                  const labels = {
-                    5: "Excellent (≥ −65 dBm)",
-                    4: "Good (−75 to −65)",
-                    3: "Fair (−85 to −75)",
-                    2: "Poor (−95 to −85)",
-                    1: "Very Poor (< −95)",
-                  };
                   return (
                     <div key={lvl} className="flex items-center gap-2">
                       <div className={`w-3 h-3 rounded-full ${colors[lvl]}`} />
-                      <span className="text-xs text-slate-300">{labels[lvl]}</span>
+                      <span className="text-xs text-slate-300">
+                        {t.filterPanel.legend.signal[lvl]}
+                      </span>
                     </div>
                   );
                 })}
               </>
             ) : (
               <>
-                {(["5G", "4G", "3G", "2G"] as const).map((t) => (
-                  <div key={t} className="flex items-center gap-2">
-                    <div className={`w-3 h-3 rounded-full ${NETWORK_COLORS[t]}`} />
-                    <span className="text-xs text-slate-300">{t}</span>
+                {(["5G", "4G", "3G", "2G"] as const).map((type) => (
+                  <div key={type} className="flex items-center gap-2">
+                    <div className={`w-3 h-3 rounded-full ${NETWORK_COLORS[type]}`} />
+                    <span className="text-xs text-slate-300">{type}</span>
                   </div>
                 ))}
               </>
@@ -150,7 +148,7 @@ export default function FilterPanel({
       {/* Carrier filter */}
       <Card className="bg-slate-800 border-slate-600">
         <CardHeader className="pb-2 pt-4 px-4">
-          <CardTitle className="text-sm text-white">Carrier</CardTitle>
+          <CardTitle className="text-sm text-white">{t.filterPanel.carrier}</CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-4 flex flex-wrap gap-2">
           {ALL_CARRIERS.map((carrier) => {
@@ -177,7 +175,7 @@ export default function FilterPanel({
       {/* Network type filter */}
       <Card className="bg-slate-800 border-slate-600">
         <CardHeader className="pb-2 pt-4 px-4">
-          <CardTitle className="text-sm text-white">Network Type</CardTitle>
+          <CardTitle className="text-sm text-white">{t.filterPanel.networkType}</CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-4 flex flex-wrap gap-2">
           {ALL_NETWORK_TYPES.map((type) => {
@@ -208,7 +206,7 @@ export default function FilterPanel({
       <Card className="bg-slate-800 border-slate-600">
         <CardHeader className="pb-2 pt-4 px-4">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-sm text-white">Signal Level</CardTitle>
+            <CardTitle className="text-sm text-white">{t.filterPanel.signalLevel}</CardTitle>
             <span className="text-xs text-slate-400">
               {filters.levelRange[0]} – {filters.levelRange[1]}
             </span>
@@ -226,8 +224,8 @@ export default function FilterPanel({
             className="mt-2"
           />
           <div className="flex justify-between mt-2">
-            <span className="text-xs text-slate-500">Weak (1)</span>
-            <span className="text-xs text-slate-500">Strong (5)</span>
+            <span className="text-xs text-slate-500">{t.filterPanel.weak}</span>
+            <span className="text-xs text-slate-500">{t.filterPanel.strong}</span>
           </div>
         </CardContent>
       </Card>

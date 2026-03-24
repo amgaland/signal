@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Sample } from "@/lib/mockData";
+import { useLanguage } from "@/lib/LanguageContext";
 
 interface CoverageMapProps {
   samples: Sample[];
@@ -34,6 +35,7 @@ function formatTs(ts: string) {
 }
 
 export default function CoverageMap({ samples, colorMode }: CoverageMapProps) {
+  const { t } = useLanguage();
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
@@ -183,15 +185,15 @@ export default function CoverageMap({ samples, colorMode }: CoverageMapProps) {
 
           {/* Data rows */}
           <div className="space-y-1.5 text-xs">
-            <Row label="Signal" value={`${selectedSample.cellular_dbm} dBm`} />
+            <Row label={t.popover.signal} value={`${selectedSample.cellular_dbm} dBm`} />
             <Row
-              label="Level"
+              label={t.popover.level}
               value={`${selectedSample.cellular_level} / 5`}
-              valueClass={`font-bold`}
+              valueClass="font-bold"
             />
-            <Row label="WiFi" value={`${selectedSample.wifi_dbm} dBm`} />
-            <Row label="Speed" value={`${selectedSample.speed_kmh} km/h`} />
-            <Row label="App" value={selectedSample.app_version} />
+            <Row label={t.popover.wifi} value={`${selectedSample.wifi_dbm} dBm`} />
+            <Row label={t.popover.speed} value={`${selectedSample.speed_kmh} km/h`} />
+            <Row label={t.popover.app} value={selectedSample.app_version} />
             <div className="pt-1 border-t border-slate-600">
               <p className="text-slate-400">{formatTs(selectedSample.ts)}</p>
             </div>
