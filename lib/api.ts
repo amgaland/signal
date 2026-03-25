@@ -26,15 +26,25 @@ export type CoverageResponse =
 export async function fetchCoverage(q: CoverageQuery): Promise<CoverageResponse> {
   // Build query string manually — URLSearchParams encodes commas as %2C
   // but this backend expects literal commas (e.g. bbox=47.85,106.82,47.97,107.02)
+  const ALL_CARRIERS    = ["Mobicom", "Unitel", "Skytel"];
+  const ALL_NETWORKS    = ["2G", "3G", "4G", "5G"];
+
   const parts: string[] = [
     `bbox=${q.bbox.join(",")}`,
     `zoom=${q.zoom}`,
-    `level_min=${q.levelMin}`,
-    `level_max=${q.levelMax}`,
   ];
-  if (q.carriers.length)     parts.push(`carrier=${q.carriers.join(",")}`);
-  if (q.networkTypes.length) parts.push(`network_type=${q.networkTypes.join(",")}`);
-  if (q.isdn)                parts.push(`isdn=${encodeURIComponent(q.isdn)}`);
+
+  // Only send level filters when non-default
+  if (q.levelMin > 1)  parts.push(`level_min=${q.levelMin}`);
+  if (q.levelMax < 5)  parts.push(`level_max=${q.levelMax}`);
+
+  // Only send carrier/network filters when not all selected
+  const carrierFiltered = q.carriers.length < ALL_CARRIERS.length;
+  const networkFiltered = q.networkTypes.length < ALL_NETWORKS.length;
+  if (carrierFiltered)  parts.push(`carrier=${q.carriers.join(",")}`);
+  if (networkFiltered)  parts.push(`network_type=${q.networkTypes.join(",")}`);
+
+  if (q.isdn) parts.push(`isdn=${encodeURIComponent(q.isdn)}`);
 
   const url = `${COVERAGE_URL}?${parts.join("&")}`;
   console.log("[coverage] GET", url);
